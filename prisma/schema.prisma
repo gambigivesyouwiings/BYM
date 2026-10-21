@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  date        DateTime
+  time        String
+  venue       String
+  imageUrl    String?
+  price       Float    @default(0)
+  capacity    Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  registrations Registration[]
+}
+
+model Registration {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name          String
+  email         String
+  phone         String
+  payerName     String?
+  status        String   @default("provisional") // provisional, pending_payment, payment_uploaded, confirmed
+  mpesaCode     String?
+  mpesaScreenshot String?
+  amountPaid    Float?   @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GalleryImage {
+  id        String   @id @default(cuid())
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+}
+
+model SermonEntry {
+  id          String   @id @default(cuid())
+  title       String
+  speaker     String
+  date        DateTime
+  youtubeUrl  String?
+  description String?
+  createdAt   DateTime @default(now())
+}
