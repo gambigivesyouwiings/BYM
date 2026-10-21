@@ -67,9 +67,12 @@ export async function POST(request: NextRequest) {
 
     // Check if real credentials are configured
     if (
-      CONSUMER_KEY === 'YOUR_CONSUMER_KEY_HERE' ||
-      CONSUMER_SECRET === 'YOUR_CONSUMER_SECRET_HERE' ||
-      PASSKEY === 'YOUR_PASSKEY_HERE'
+      !CONSUMER_KEY ||
+      CONSUMER_KEY.startsWith('YOUR_') ||
+      !CONSUMER_SECRET ||
+      CONSUMER_SECRET.startsWith('YOUR_') ||
+      !PASSKEY ||
+      PASSKEY.startsWith('YOUR_')
     ) {
       // Return simulated success for development
       console.log('[M-Pesa STK Push] Simulated request:', {
