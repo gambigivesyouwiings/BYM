@@ -143,7 +143,8 @@ export async function POST(
           status = 'payment_uploaded';
           amountPaidPerTicket = event.price;
         } catch (err) {
-          console.error('Failed to save screenshot:', err);
+          console.warn('Serverless filesystem fallback: storing screenshot data URI directly in database');
+          screenshotPath = mpesaScreenshot;
           status = 'payment_uploaded';
           amountPaidPerTicket = event.price;
         }

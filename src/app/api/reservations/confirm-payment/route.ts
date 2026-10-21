@@ -51,9 +51,10 @@ export async function POST(request: NextRequest) {
 
         await writeFile(filePath, buffer);
         screenshotPath = `/uploads/mpesa/${filename}`;
-        if (!finalCode) finalCode = 'SCREENSHOT_UPLOADED';
       } catch (err) {
-        console.error('Failed to save payment proof screenshot:', err);
+        console.warn('Serverless filesystem fallback: storing screenshot data URI directly in database');
+        screenshotPath = mpesaScreenshot;
+        if (!finalCode) finalCode = 'SCREENSHOT_UPLOADED';
       }
     }
 
