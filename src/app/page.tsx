@@ -134,6 +134,8 @@ const defaultGallery: GalleryItem[] = [
   },
 ];
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
   let events: EventItem[] = defaultEvents;
   let sermons: SermonItem[] = defaultSermons;
@@ -150,7 +152,6 @@ export default async function HomePage() {
 
     const dbSermons = await prisma.sermonEntry.findMany({
       orderBy: { date: 'desc' },
-      take: 3,
     });
     if (dbSermons.length > 0) {
       sermons = dbSermons;
@@ -158,7 +159,6 @@ export default async function HomePage() {
 
     const dbGallery = await prisma.galleryImage.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 6,
     });
     if (dbGallery.length > 0) {
       gallery = dbGallery;

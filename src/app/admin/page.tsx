@@ -8,6 +8,7 @@ import {
   CreditCard,
   Plus,
   Trash2,
+  Pencil,
   CheckCircle,
   Clock,
   LogOut,
@@ -24,9 +25,11 @@ import {
   Phone,
   Mail,
   ChevronRight,
-  Sparkles,
   MapPin,
-  CheckCircle2,
+  BookOpen,
+  Image as ImageIcon,
+  Play,
+  Upload,
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
@@ -66,11 +69,29 @@ interface RegistrationItem {
   };
 }
 
+interface SermonItem {
+  id: string;
+  title: string;
+  speaker: string;
+  date: string;
+  youtubeUrl?: string | null;
+  description?: string | null;
+}
+
+interface GalleryItem {
+  id: string;
+  url: string;
+  caption?: string | null;
+  createdAt?: string;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'events' | 'registrations'>('events');
+  const [activeTab, setActiveTab] = useState<'events' | 'registrations' | 'sermons' | 'gallery'>('events');
   const [events, setEvents] = useState<EventItem[]>([]);
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
+  const [sermons, setSermons] = useState<SermonItem[]>([]);
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEventFilterInTable, setSelectedEventFilterInTable] = useState<string>('all');
@@ -81,10 +102,11 @@ export default function AdminDashboardPage() {
   const [participantSearch, setParticipantSearch] = useState('');
   const [copiedPhones, setCopiedPhones] = useState(false);
 
-  // New Event Modal State
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [newEventData, setNewEventData] = useState({
+  // Event Create / Edit Modal State
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [eventFormData, setEventFormData] = useState({
     title: '',
     description: '',
     date: '',
@@ -95,12 +117,35 @@ export default function AdminDashboardPage() {
     capacity: 100,
   });
 
+  // Sermon Create / Edit Modal State
+  const [isSermonModalOpen, setIsSermonModalOpen] = useState(false);
+  const [editingSermonId, setEditingSermonId] = useState<string | null>(null);
+  const [sermonLoading, setSermonLoading] = useState(false);
+  const [sermonFormData, setSermonFormData] = useState({
+    title: '',
+    speaker: '',
+    date: '',
+    youtubeUrl: '',
+    description: '',
+  });
+
+  // Gallery Create / Edit Modal State
+  const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
+  const [editingGalleryId, setEditingGalleryId] = useState<string | null>(null);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryFormData, setGalleryFormData] = useState({
+    url: '',
+    caption: '',
+  });
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [eventsRes, regsRes] = await Promise.all([
+      const [eventsRes, regsRes, sermonsRes, galleryRes] = await Promise.all([
         fetch('/api/admin/events'),
         fetch('/api/admin/registrations'),
+        fetch('/api/admin/sermons'),
+        fetch('/api/admin/gallery'),
       ]);
 
       if (eventsRes.ok) {
@@ -110,6 +155,14 @@ export default function AdminDashboardPage() {
       if (regsRes.ok) {
         const d = await regsRes.json();
         setRegistrations(d.registrations || []);
+      }
+      if (sermonsRes.ok) {
+        const d = await sermonsRes.json();
+        setSermons(d.sermons || []);
+      }
+      if (galleryRes.ok) {
+        const d = await galleryRes.json();
+        setGallery(d.gallery || []);
       }
     } catch (err) {
       console.error('Failed to load admin data:', err);
@@ -132,38 +185,66 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleCreateEvent = async (e: React.FormEvent) => {
+  // =========================================================================
+  // EVENT HANDLERS
+  // =========================================================================
+  const openCreateEventModal = () => {
+    setEditingEventId(null);
+    setEventFormData({
+      title: '',
+      description: '',
+      date: '',
+      time: '',
+      venue: '',
+      imageUrl: '',
+      price: 0,
+      capacity: 100,
+    });
+    setIsEventModalOpen(true);
+  };
+
+  const openEditEventModal = (event: EventItem) => {
+    setEditingEventId(event.id);
+    const formattedDate = event.date ? new Date(event.date).toISOString().split('T')[0] : '';
+    setEventFormData({
+      title: event.title,
+      description: event.description,
+      date: formattedDate,
+      time: event.time,
+      venue: event.venue,
+      imageUrl: event.imageUrl || '',
+      price: event.price,
+      capacity: event.capacity,
+    });
+    setIsEventModalOpen(true);
+  };
+
+  const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreateLoading(true);
+    setEventLoading(true);
 
     try {
-      const res = await fetch('/api/admin/events', {
-        method: 'POST',
+      const url = editingEventId ? `/api/admin/events/${editingEventId}` : '/api/admin/events';
+      const method = editingEventId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newEventData),
+        body: JSON.stringify(eventFormData),
       });
 
       if (res.ok) {
-        setIsCreateModalOpen(false);
-        setNewEventData({
-          title: '',
-          description: '',
-          date: '',
-          time: '',
-          venue: '',
-          imageUrl: '',
-          price: 0,
-          capacity: 100,
-        });
+        setIsEventModalOpen(false);
+        setEditingEventId(null);
         await fetchData();
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to create event');
+        alert(err.error || 'Failed to save event');
       }
     } catch (err) {
-      alert('An error occurred while creating the event.');
+      alert('An error occurred while saving the event.');
     } finally {
-      setCreateLoading(false);
+      setEventLoading(false);
     }
   };
 
@@ -183,6 +264,158 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // =========================================================================
+  // SERMON HANDLERS
+  // =========================================================================
+  const openCreateSermonModal = () => {
+    setEditingSermonId(null);
+    setSermonFormData({
+      title: '',
+      speaker: '',
+      date: new Date().toISOString().split('T')[0],
+      youtubeUrl: '',
+      description: '',
+    });
+    setIsSermonModalOpen(true);
+  };
+
+  const openEditSermonModal = (sermon: SermonItem) => {
+    setEditingSermonId(sermon.id);
+    const formattedDate = sermon.date ? new Date(sermon.date).toISOString().split('T')[0] : '';
+    setSermonFormData({
+      title: sermon.title,
+      speaker: sermon.speaker,
+      date: formattedDate,
+      youtubeUrl: sermon.youtubeUrl || '',
+      description: sermon.description || '',
+    });
+    setIsSermonModalOpen(true);
+  };
+
+  const handleSaveSermon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSermonLoading(true);
+
+    try {
+      const url = editingSermonId ? `/api/admin/sermons/${editingSermonId}` : '/api/admin/sermons';
+      const method = editingSermonId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sermonFormData),
+      });
+
+      if (res.ok) {
+        setIsSermonModalOpen(false);
+        setEditingSermonId(null);
+        await fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save sermon');
+      }
+    } catch (err) {
+      alert('An error occurred while saving the sermon.');
+    } finally {
+      setSermonLoading(false);
+    }
+  };
+
+  const handleDeleteSermon = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this sermon?')) return;
+    try {
+      const res = await fetch(`/api/admin/sermons/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setSermons(sermons.filter((s) => s.id !== id));
+      }
+    } catch (err) {
+      alert('Failed to delete sermon');
+    }
+  };
+
+  // =========================================================================
+  // GALLERY HANDLERS
+  // =========================================================================
+  const openCreateGalleryModal = () => {
+    setEditingGalleryId(null);
+    setGalleryFormData({
+      url: '',
+      caption: '',
+    });
+    setIsGalleryModalOpen(true);
+  };
+
+  const openEditGalleryModal = (item: GalleryItem) => {
+    setEditingGalleryId(item.id);
+    setGalleryFormData({
+      url: item.url,
+      caption: item.caption || '',
+    });
+    setIsGalleryModalOpen(true);
+  };
+
+  const handleGalleryFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setGalleryFormData((prev) => ({ ...prev, url: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveGallery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!galleryFormData.url.trim()) {
+      alert('Please provide an image URL or upload an image file.');
+      return;
+    }
+    setGalleryLoading(true);
+
+    try {
+      const endpoint = editingGalleryId
+        ? `/api/admin/gallery/${editingGalleryId}`
+        : '/api/admin/gallery';
+      const method = editingGalleryId ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(galleryFormData),
+      });
+
+      if (res.ok) {
+        setIsGalleryModalOpen(false);
+        setEditingGalleryId(null);
+        await fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save gallery image');
+      }
+    } catch (err) {
+      alert('An error occurred while saving the gallery image.');
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const handleDeleteGallery = async (id: string) => {
+    if (!confirm('Are you sure you want to remove this photo from the gallery?')) return;
+    try {
+      const res = await fetch(`/api/admin/gallery/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setGallery(gallery.filter((g) => g.id !== id));
+      }
+    } catch (err) {
+      alert('Failed to delete gallery photo');
+    }
+  };
+
+  // =========================================================================
+  // REGISTRATION HANDLERS
+  // =========================================================================
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
       const res = await fetch('/api/admin/registrations', {
@@ -201,7 +434,6 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Copy all phone numbers for selected event
   const handleCopyPhones = (eventRegs: RegistrationItem[]) => {
     const phones = eventRegs
       .map((r) => r.phone.trim())
@@ -331,27 +563,54 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Tab Controls & Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center p-1 rounded-xl bg-[#16102B] border border-purple-900/40">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-1 p-1 rounded-xl bg-[#16102B] border border-purple-900/40">
             <button
               onClick={() => setActiveTab('events')}
-              className={`px-5 py-2 rounded-lg text-xs font-bold transition ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 activeTab === 'events'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Events Management ({events.length})
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Events ({events.length})</span>
             </button>
+
             <button
               onClick={() => setActiveTab('registrations')}
-              className={`px-5 py-2 rounded-lg text-xs font-bold transition ${
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
                 activeTab === 'registrations'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              Registrations & Payments ({registrations.length})
+              <Users className="w-3.5 h-3.5" />
+              <span>Registrations ({registrations.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('sermons')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === 'sermons'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Sermon Vault ({sermons.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('gallery')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                activeTab === 'gallery'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>Photo Gallery ({gallery.length})</span>
             </button>
           </div>
 
@@ -366,21 +625,43 @@ export default function AdminDashboardPage() {
 
             {activeTab === 'events' && (
               <button
-                onClick={() => setIsCreateModalOpen(true)}
+                onClick={openCreateEventModal}
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-md shadow-purple-950 flex items-center gap-2 transition"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create New Event</span>
               </button>
             )}
+
+            {activeTab === 'sermons' && (
+              <button
+                onClick={openCreateSermonModal}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-gray-950 font-bold text-xs shadow-md shadow-amber-950/50 flex items-center gap-2 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Sermon</span>
+              </button>
+            )}
+
+            {activeTab === 'gallery' && (
+              <button
+                onClick={openCreateGalleryModal}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md shadow-purple-950 flex items-center gap-2 transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Gallery Photo</span>
+              </button>
+            )}
           </div>
         </div>
 
-        {/* TAB 1: EVENTS (CLICKABLE TO SHOW PARTICIPANTS) */}
+        {/* ========================================================================= */}
+        {/* TAB 1: EVENTS (CLICKABLE TO SHOW PARTICIPANTS + EDIT / DELETE) */}
+        {/* ========================================================================= */}
         {activeTab === 'events' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between text-xs text-gray-400 px-1">
-              <span>💡 Click on any event card or the &quot;View Participants&quot; button to see attendees and their availability status.</span>
+              <span>💡 Click on any event card to inspect participants, or use the Edit / Delete buttons below.</span>
               <span>{events.length} Events Total</span>
             </div>
 
@@ -481,16 +762,28 @@ export default function AdminDashboardPage() {
                         <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteEvent(event.id);
-                        }}
-                        className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
-                        title="Delete Event"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditEventModal(event);
+                          }}
+                          className="p-1.5 rounded-lg text-indigo-300 hover:text-white hover:bg-indigo-500/20 transition"
+                          title="Edit Event"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEvent(event.id);
+                          }}
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+                          title="Delete Event"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -499,7 +792,9 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
+        {/* ========================================================================= */}
         {/* TAB 2: REGISTRATIONS & PAYMENTS */}
+        {/* ========================================================================= */}
         {activeTab === 'registrations' && (
           <div className="space-y-4">
             {/* Filter Bar with Search and Event Select */}
@@ -658,6 +953,146 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* TAB 3: SERMON VAULT MANAGEMENT */}
+        {/* ========================================================================= */}
+        {activeTab === 'sermons' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-gray-400 px-1">
+              <span>Manage sermons displayed in the Sermon Vault section on the homepage.</span>
+              <span>{sermons.length} Sermons Total</span>
+            </div>
+
+            {sermons.length === 0 ? (
+              <div className="p-12 rounded-2xl bg-[#16102B] border border-purple-900/40 text-center space-y-3">
+                <BookOpen className="w-8 h-8 text-amber-400 mx-auto" />
+                <p className="text-sm font-semibold text-white">No sermons in database yet</p>
+                <p className="text-xs text-gray-400">Click &quot;Add New Sermon&quot; to publish teachings to the Sermon Vault.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sermons.map((sermon) => (
+                  <div
+                    key={sermon.id}
+                    className="rounded-2xl bg-[#16102B] border border-purple-900/40 hover:border-amber-500/50 transition-all p-6 flex flex-col justify-between space-y-5 shadow-xl"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-xs text-gray-400">
+                        <span className="text-amber-400 font-semibold">{sermon.speaker}</span>
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                          {formatDate(sermon.date)}
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-bold text-white line-clamp-2">{sermon.title}</h3>
+                      {sermon.description && (
+                        <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
+                          {sermon.description}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-4 border-t border-purple-900/30 flex items-center justify-between gap-2">
+                      {sermon.youtubeUrl ? (
+                        <a
+                          href={sermon.youtubeUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-purple-300 hover:text-amber-300 transition"
+                        >
+                          <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                          <span>YouTube Link</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-500">No video link</span>
+                      )}
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openEditSermonModal(sermon)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-500/20 text-indigo-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSermon(sermon.id)}
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+                          title="Delete Sermon"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* TAB 4: PHOTO GALLERY MANAGEMENT */}
+        {/* ========================================================================= */}
+        {activeTab === 'gallery' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between text-xs text-gray-400 px-1">
+              <span>Manage fellowship photos displayed in the Moments & Memories gallery on the homepage.</span>
+              <span>{gallery.length} Photos Total</span>
+            </div>
+
+            {gallery.length === 0 ? (
+              <div className="p-12 rounded-2xl bg-[#16102B] border border-purple-900/40 text-center space-y-3">
+                <ImageIcon className="w-8 h-8 text-purple-400 mx-auto" />
+                <p className="text-sm font-semibold text-white">No gallery photos in database yet</p>
+                <p className="text-xs text-gray-400">Click &quot;Add Gallery Photo&quot; to upload images or add image URLs.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {gallery.map((img) => (
+                  <div
+                    key={img.id}
+                    className="group rounded-2xl overflow-hidden bg-[#16102B] border border-purple-900/40 hover:border-purple-500/60 shadow-xl flex flex-col justify-between transition-all"
+                  >
+                    <div className="relative h-56 w-full bg-[#0F0B1A] overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.url}
+                        alt={img.caption || 'Gallery image'}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    </div>
+
+                    <div className="p-4 flex items-center justify-between gap-3 bg-[#16102B]">
+                      <p className="text-xs font-medium text-gray-200 line-clamp-2 flex-1">
+                        {img.caption || 'MCK Beyond Youth Community'}
+                      </p>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => openEditGalleryModal(img)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-500/20 text-indigo-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteGallery(img.id)}
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition"
+                          title="Delete Photo"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -666,7 +1101,6 @@ export default function AdminDashboardPage() {
       {selectedEventForParticipants && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-4xl bg-[#16102B] border border-purple-800/50 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-8 text-gray-100 max-h-[92vh] flex flex-col space-y-6">
-            {/* Close Button */}
             <button
               onClick={() => setSelectedEventForParticipants(null)}
               className="absolute top-5 right-5 text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors"
@@ -674,7 +1108,6 @@ export default function AdminDashboardPage() {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Event Header Banner */}
             <div className="border-b border-purple-900/40 pb-5 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
@@ -717,7 +1150,6 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              {/* Progress bar */}
               <div className="w-full h-2 rounded-full bg-[#0F0B1A] overflow-hidden mt-2">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-500 transition-all duration-500"
@@ -733,7 +1165,6 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Availability Breakdown Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 type="button"
@@ -800,7 +1231,6 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* Filter & Actions Bar */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -819,7 +1249,6 @@ export default function AdminDashboardPage() {
                   onClick={() => handleCopyPhones(filteredEventParticipants)}
                   disabled={filteredEventParticipants.length === 0}
                   className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-purple-800/40 text-xs font-semibold text-purple-200 flex items-center gap-1.5 transition disabled:opacity-40"
-                  title="Copy attendee phone numbers for SMS/WhatsApp"
                 >
                   {copiedPhones ? (
                     <>
@@ -849,7 +1278,6 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {/* Participants Table Container */}
             <div className="flex-1 overflow-y-auto rounded-2xl bg-[#0F0B1A] border border-purple-900/40">
               <table className="w-full text-left text-xs">
                 <thead className="bg-[#120B22] text-gray-400 uppercase tracking-wider border-b border-purple-900/40 sticky top-0 z-10">
@@ -965,7 +1393,6 @@ export default function AdminDashboardPage() {
               </table>
             </div>
 
-            {/* Modal Footer */}
             <div className="pt-2 flex items-center justify-between text-xs text-gray-400 border-t border-purple-900/30">
               <span>Showing {filteredEventParticipants.length} of {eventParticipants.length} participants</span>
               <button
@@ -980,27 +1407,31 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* CREATE EVENT MODAL */}
-      {isCreateModalOpen && (
+      {/* ========================================================================= */}
+      {/* MODAL: CREATE / EDIT EVENT */}
+      {/* ========================================================================= */}
+      {isEventModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="relative w-full max-w-lg bg-[#16102B] border border-purple-800/40 rounded-2xl shadow-2xl p-6 text-gray-100 max-h-[90vh] overflow-y-auto">
             <button
-              onClick={() => setIsCreateModalOpen(false)}
+              onClick={() => setIsEventModalOpen(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-lg"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-xl font-bold text-white mb-4">Create New Ministry Event</h3>
+            <h3 className="text-xl font-bold text-white mb-4">
+              {editingEventId ? 'Edit Ministry Event' : 'Create New Ministry Event'}
+            </h3>
 
-            <form onSubmit={handleCreateEvent} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveEvent} className="space-y-4 text-xs">
               <div>
                 <label className="block font-medium text-gray-300 mb-1">Event Title *</label>
                 <input
                   type="text"
                   required
-                  value={newEventData.title}
-                  onChange={(e) => setNewEventData({ ...newEventData, title: e.target.value })}
+                  value={eventFormData.title}
+                  onChange={(e) => setEventFormData({ ...eventFormData, title: e.target.value })}
                   placeholder="e.g. Beyond Worship Experience 2026"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                 />
@@ -1011,8 +1442,8 @@ export default function AdminDashboardPage() {
                 <textarea
                   rows={3}
                   required
-                  value={newEventData.description}
-                  onChange={(e) => setNewEventData({ ...newEventData, description: e.target.value })}
+                  value={eventFormData.description}
+                  onChange={(e) => setEventFormData({ ...eventFormData, description: e.target.value })}
                   placeholder="Detail the theme, guest minister, vision..."
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500 resize-none"
                 />
@@ -1024,8 +1455,8 @@ export default function AdminDashboardPage() {
                   <input
                     type="date"
                     required
-                    value={newEventData.date}
-                    onChange={(e) => setNewEventData({ ...newEventData, date: e.target.value })}
+                    value={eventFormData.date}
+                    onChange={(e) => setEventFormData({ ...eventFormData, date: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -1034,8 +1465,8 @@ export default function AdminDashboardPage() {
                   <input
                     type="text"
                     required
-                    value={newEventData.time}
-                    onChange={(e) => setNewEventData({ ...newEventData, time: e.target.value })}
+                    value={eventFormData.time}
+                    onChange={(e) => setEventFormData({ ...eventFormData, time: e.target.value })}
                     placeholder="e.g. 10:00 AM - 04:00 PM"
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                   />
@@ -1047,8 +1478,8 @@ export default function AdminDashboardPage() {
                 <input
                   type="text"
                   required
-                  value={newEventData.venue}
-                  onChange={(e) => setNewEventData({ ...newEventData, venue: e.target.value })}
+                  value={eventFormData.venue}
+                  onChange={(e) => setEventFormData({ ...eventFormData, venue: e.target.value })}
                   placeholder="e.g. MCK Sanctuary, Nairobi"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                 />
@@ -1060,8 +1491,8 @@ export default function AdminDashboardPage() {
                   <input
                     type="number"
                     min="0"
-                    value={newEventData.price}
-                    onChange={(e) => setNewEventData({ ...newEventData, price: Number(e.target.value) })}
+                    value={eventFormData.price}
+                    onChange={(e) => setEventFormData({ ...eventFormData, price: Number(e.target.value) })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -1070,8 +1501,8 @@ export default function AdminDashboardPage() {
                   <input
                     type="number"
                     min="1"
-                    value={newEventData.capacity}
-                    onChange={(e) => setNewEventData({ ...newEventData, capacity: Number(e.target.value) })}
+                    value={eventFormData.capacity}
+                    onChange={(e) => setEventFormData({ ...eventFormData, capacity: Number(e.target.value) })}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -1081,8 +1512,8 @@ export default function AdminDashboardPage() {
                 <label className="block font-medium text-gray-300 mb-1">Cover Image URL</label>
                 <input
                   type="url"
-                  value={newEventData.imageUrl}
-                  onChange={(e) => setNewEventData({ ...newEventData, imageUrl: e.target.value })}
+                  value={eventFormData.imageUrl}
+                  onChange={(e) => setEventFormData({ ...eventFormData, imageUrl: e.target.value })}
                   placeholder="https://images.unsplash.com/..."
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
                 />
@@ -1091,18 +1522,207 @@ export default function AdminDashboardPage() {
               <div className="pt-4 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
+                  onClick={() => setIsEventModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-gray-400 hover:text-white transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={createLoading}
+                  disabled={eventLoading}
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold flex items-center gap-2 disabled:opacity-50 transition"
                 >
-                  {createLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Save & Publish</span>
+                  {eventLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{editingEventId ? 'Save Changes' : 'Save & Publish'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CREATE / EDIT SERMON */}
+      {/* ========================================================================= */}
+      {isSermonModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-[#16102B] border border-purple-800/40 rounded-2xl shadow-2xl p-6 text-gray-100 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsSermonModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-xl font-bold text-white mb-4">
+              {editingSermonId ? 'Edit Sermon Entry' : 'Add New Sermon to Vault'}
+            </h3>
+
+            <form onSubmit={handleSaveSermon} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-medium text-gray-300 mb-1">Sermon Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={sermonFormData.title}
+                  onChange={(e) => setSermonFormData({ ...sermonFormData, title: e.target.value })}
+                  placeholder="e.g. Unashamed: Living With Conviction"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-medium text-gray-300 mb-1">Speaker / Preacher *</label>
+                  <input
+                    type="text"
+                    required
+                    value={sermonFormData.speaker}
+                    onChange={(e) => setSermonFormData({ ...sermonFormData, speaker: e.target.value })}
+                    placeholder="e.g. Pastor David Mwangi"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-medium text-gray-300 mb-1">Date Preached *</label>
+                  <input
+                    type="date"
+                    required
+                    value={sermonFormData.date}
+                    onChange={(e) => setSermonFormData({ ...sermonFormData, date: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-300 mb-1">YouTube Video / Watch Link</label>
+                <input
+                  type="url"
+                  value={sermonFormData.youtubeUrl}
+                  onChange={(e) => setSermonFormData({ ...sermonFormData, youtubeUrl: e.target.value })}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-300 mb-1">Sermon Summary / Description</label>
+                <textarea
+                  rows={3}
+                  value={sermonFormData.description}
+                  onChange={(e) => setSermonFormData({ ...sermonFormData, description: e.target.value })}
+                  placeholder="Brief summary of the message and key scripture..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsSermonModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-gray-400 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={sermonLoading}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-gray-950 font-bold flex items-center gap-2 disabled:opacity-50 transition"
+                >
+                  {sermonLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{editingSermonId ? 'Update Sermon' : 'Publish Sermon'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CREATE / EDIT GALLERY PHOTO */}
+      {/* ========================================================================= */}
+      {isGalleryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-[#16102B] border border-purple-800/40 rounded-2xl shadow-2xl p-6 text-gray-100 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsGalleryModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 rounded-lg"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-xl font-bold text-white mb-4">
+              {editingGalleryId ? 'Edit Gallery Photo' : 'Add Photo to Gallery'}
+            </h3>
+
+            <form onSubmit={handleSaveGallery} className="space-y-4 text-xs">
+              {/* Upload from device */}
+              <div>
+                <label className="block font-medium text-gray-300 mb-1.5">
+                  Upload Photo File (or paste an Image URL below)
+                </label>
+                <label className="flex items-center justify-center gap-2 w-full p-4 rounded-xl border-2 border-dashed border-purple-800/60 hover:border-indigo-500 bg-[#0F0B1A] cursor-pointer transition text-gray-300 hover:text-white">
+                  <Upload className="w-4 h-4 text-amber-400" />
+                  <span>Choose Image from Device (JPG / PNG)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleGalleryFileUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label className="block font-medium text-gray-300 mb-1">Image URL *</label>
+                <input
+                  type="text"
+                  required
+                  value={galleryFormData.url}
+                  onChange={(e) => setGalleryFormData({ ...galleryFormData, url: e.target.value })}
+                  placeholder="https://images.unsplash.com/... or uploaded image"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {galleryFormData.url && (
+                <div className="rounded-xl overflow-hidden border border-purple-900/50 bg-[#0F0B1A] h-44">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={galleryFormData.url}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-medium text-gray-300 mb-1">Caption / Moment Description</label>
+                <input
+                  type="text"
+                  value={galleryFormData.caption}
+                  onChange={(e) => setGalleryFormData({ ...galleryFormData, caption: e.target.value })}
+                  placeholder="e.g. Sunday Celebration Worship"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsGalleryModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-gray-400 hover:text-white transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={galleryLoading}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold flex items-center gap-2 disabled:opacity-50 transition"
+                >
+                  {galleryLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{editingGalleryId ? 'Update Photo' : 'Add to Gallery'}</span>
                 </button>
               </div>
             </form>
