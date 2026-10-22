@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export async function POST(
   request: NextRequest,
@@ -128,26 +126,9 @@ export async function POST(
 
     if (event.price > 0) {
       if (mpesaScreenshot && mpesaScreenshot.startsWith('data:image')) {
-        try {
-          const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'mpesa');
-          await mkdir(uploadsDir, { recursive: true });
-
-          const base64Data = mpesaScreenshot.split(',')[1];
-          const buffer = Buffer.from(base64Data, 'base64');
-          const extension = mpesaScreenshot.includes('png') ? 'png' : 'jpg';
-          const filename = `mpesa_${eventId}_${Date.now()}.${extension}`;
-          const filePath = path.join(uploadsDir, filename);
-
-          await writeFile(filePath, buffer);
-          screenshotPath = `/uploads/mpesa/${filename}`;
-          status = 'payment_uploaded';
-          amountPaidPerTicket = event.price;
-        } catch (err) {
-          console.warn('Serverless filesystem fallback: storing screenshot data URI directly in database');
-          screenshotPath = mpesaScreenshot;
-          status = 'payment_uploaded';
-          amountPaidPerTicket = event.price;
-        }
+        screenshotPath = mpesaScreenshot;
+        status = 'payment_uploaded';
+        amountPaidPerTicket = event.price;
       } else if (mpesaCode && mpesaCode.trim().length >= 6 && mpesaCode !== 'SCREENSHOT_UPLOADED') {
         status = 'payment_uploaded';
         amountPaidPerTicket = event.price;

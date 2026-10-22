@@ -31,7 +31,7 @@ import {
   Play,
   Upload,
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 
 interface EventItem {
   id: string;
@@ -138,6 +138,9 @@ export default function AdminDashboardPage() {
     caption: '',
   });
 
+  // Payment Proof Preview Modal State
+  const [previewProof, setPreviewProof] = useState<{ url: string; attendeeName: string } | null>(null);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -219,16 +222,15 @@ export default function AdminDashboardPage() {
     setIsEventModalOpen(true);
   };
 
-  const handleEventFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEventFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setEventFormData((prev) => ({ ...prev, imageUrl: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageToDataUrl(file);
+      setEventFormData((prev) => ({ ...prev, imageUrl: compressedDataUrl }));
+    } catch (err) {
+      console.error('Error compressing event image:', err);
+    }
   };
 
   const handleSaveEvent = async (e: React.FormEvent) => {
@@ -366,16 +368,15 @@ export default function AdminDashboardPage() {
     setIsGalleryModalOpen(true);
   };
 
-  const handleGalleryFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleGalleryFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setGalleryFormData((prev) => ({ ...prev, url: reader.result as string }));
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageToDataUrl(file);
+      setGalleryFormData((prev) => ({ ...prev, url: compressedDataUrl }));
+    } catch (err) {
+      console.error('Error compressing gallery image:', err);
+    }
   };
 
   const handleSaveGallery = async (e: React.FormEvent) => {
@@ -910,15 +911,19 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-4">
                           {reg.mpesaScreenshot ? (
-                            <a
-                              href={reg.mpesaScreenshot}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewProof({
+                                  url: reg.mpesaScreenshot!,
+                                  attendeeName: reg.name,
+                                })
+                              }
                               className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 text-[11px] font-medium transition"
                             >
                               <Eye className="w-3 h-3" />
                               <span>View Proof</span>
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-gray-500">—</span>
                           )}
@@ -1379,15 +1384,19 @@ export default function AdminDashboardPage() {
                         </td>
                         <td className="p-3.5">
                           {participant.mpesaScreenshot ? (
-                            <a
-                              href={participant.mpesaScreenshot}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreviewProof({
+                                  url: participant.mpesaScreenshot!,
+                                  attendeeName: participant.name,
+                                })
+                              }
                               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 text-[11px] font-medium transition"
                             >
                               <Eye className="w-3 h-3" />
                               <span>View</span>
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-gray-500">—</span>
                           )}
@@ -1780,6 +1789,54 @@ export default function AdminDashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: PAYMENT PROOF PREVIEW */}
+      {/* ========================================================================= */}
+      {previewProof && (
+        <div
+          onClick={() => setPreviewProof(null)}
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg bg-[#16102B] border border-purple-800/50 rounded-2xl shadow-2xl p-5 text-gray-100 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">M-Pesa Payment Proof</h3>
+                <p className="text-xs text-gray-400">Submitted by {previewProof.attendeeName}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewProof(null)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl overflow-hidden bg-[#0F0B1A] border border-purple-900/40 max-h-[70vh] flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewProof.url}
+                alt={`Payment proof for ${previewProof.attendeeName}`}
+                className="max-w-full max-h-[68vh] object-contain"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewProof(null)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-white transition"
+              >
+                Close Preview
+              </button>
+            </div>
           </div>
         </div>
       )}

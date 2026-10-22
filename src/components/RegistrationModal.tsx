@@ -22,7 +22,7 @@ import {
   Search,
   CheckCircle2,
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 import EventParticipantsList, { PublicParticipant } from './EventParticipantsList';
 
 interface EventItem {
@@ -1184,10 +1184,5 @@ export default function RegistrationModal({
 }
 
 function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (err) => reject(err);
-  });
+  return compressImageToDataUrl(file);
 }

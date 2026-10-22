@@ -22,7 +22,7 @@ import {
   BookmarkCheck,
   CheckCircle2,
 } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, compressImageToDataUrl } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 
 interface EventRegistrationClientProps {
@@ -1074,10 +1074,5 @@ export default function EventRegistrationClient({
 }
 
 function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (err) => reject(err);
-  });
+  return compressImageToDataUrl(file);
 }

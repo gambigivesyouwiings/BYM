@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export async function PUT(
   request: NextRequest,
@@ -18,24 +16,6 @@ export async function PUT(
         finalImageUrl = null;
       } else if (typeof imageUrl === 'string') {
         finalImageUrl = imageUrl.trim();
-        if (finalImageUrl.startsWith('data:image')) {
-          try {
-            const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'events');
-            await mkdir(uploadsDir, { recursive: true });
-
-            const base64Data = finalImageUrl.split(',')[1];
-            const buffer = Buffer.from(base64Data, 'base64');
-            const extMatch = finalImageUrl.match(/^data:image\/(\w+);base64,/);
-            const extension = extMatch ? (extMatch[1] === 'jpeg' ? 'jpg' : extMatch[1]) : 'jpg';
-            const filename = `event_${Date.now()}.${extension}`;
-            const filePath = path.join(uploadsDir, filename);
-
-            await writeFile(filePath, buffer);
-            finalImageUrl = `/uploads/events/${filename}`;
-          } catch (err) {
-            console.warn('Serverless filesystem fallback: storing event image data URI directly in database');
-          }
-        }
       }
     }
 

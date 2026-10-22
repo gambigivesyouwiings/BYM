@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,23 +15,6 @@ export async function PUT(
 
     if (url && typeof url === 'string' && url.trim().length > 0) {
       finalUrl = url.trim();
-      if (finalUrl.startsWith('data:image')) {
-        try {
-          const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'gallery');
-          await mkdir(uploadsDir, { recursive: true });
-
-          const base64Data = finalUrl.split(',')[1];
-          const buffer = Buffer.from(base64Data, 'base64');
-          const extension = finalUrl.includes('png') ? 'png' : 'jpg';
-          const filename = `gallery_${Date.now()}.${extension}`;
-          const filePath = path.join(uploadsDir, filename);
-
-          await writeFile(filePath, buffer);
-          finalUrl = `/uploads/gallery/${filename}`;
-        } catch (err) {
-          console.warn('Serverless filesystem fallback: storing gallery image data URI directly in database');
-        }
-      }
     }
 
     const updated = await prisma.galleryImage.update({

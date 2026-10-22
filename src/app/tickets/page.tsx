@@ -24,7 +24,7 @@ import {
   Users,
   Eye,
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 
 interface EventData {
   id: string;
@@ -701,10 +701,5 @@ export default function MyTicketsPage() {
 }
 
 function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = (err) => reject(err);
-  });
+  return compressImageToDataUrl(file);
 }

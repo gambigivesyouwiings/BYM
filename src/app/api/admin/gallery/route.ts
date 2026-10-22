@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,26 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let finalUrl = url.trim();
-
-    // If base64 data URI uploaded from file input, save locally or fall back to data URI on serverless
-    if (finalUrl.startsWith('data:image')) {
-      try {
-        const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'gallery');
-        await mkdir(uploadsDir, { recursive: true });
-
-        const base64Data = finalUrl.split(',')[1];
-        const buffer = Buffer.from(base64Data, 'base64');
-        const extension = finalUrl.includes('png') ? 'png' : 'jpg';
-        const filename = `gallery_${Date.now()}.${extension}`;
-        const filePath = path.join(uploadsDir, filename);
-
-        await writeFile(filePath, buffer);
-        finalUrl = `/uploads/gallery/${filename}`;
-      } catch (err) {
-        console.warn('Serverless filesystem fallback: storing gallery image data URI directly in database');
-      }
-    }
+    const finalUrl = url.trim();
 
     const image = await prisma.galleryImage.create({
       data: {
