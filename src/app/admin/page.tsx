@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Calendar,
@@ -30,6 +30,12 @@ import {
   Image as ImageIcon,
   Play,
   Upload,
+  Crop,
+  ZoomIn,
+  ZoomOut,
+  Move,
+  RotateCcw,
+  Maximize2,
 } from 'lucide-react';
 import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 
@@ -117,6 +123,15 @@ export default function AdminDashboardPage() {
     capacity: 100,
   });
 
+  // Event Cover Image Interactive Cropper State
+  const [eventSourceImage, setEventSourceImage] = useState<string>('');
+  const [cropZoom, setCropZoom] = useState<number>(1);
+  const [cropOffset, setCropOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const cropCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const loadedImgRef = useRef<HTMLImageElement | null>(null);
+  const dragStartRef = useRef<{ clientX: number; clientY: number; startX: number; startY: number } | null>(null);
+
   // Sermon Create / Edit Modal State
   const [isSermonModalOpen, setIsSermonModalOpen] = useState(false);
   const [editingSermonId, setEditingSermonId] = useState<string | null>(null);
@@ -189,10 +204,143 @@ export default function AdminDashboardPage() {
   };
 
   // =========================================================================
-  // EVENT HANDLERS
+  // EVENT HANDLERS & IMAGE CROPPER
   // =========================================================================
+  const CROP_WIDTH = 960;
+  const CROP_HEIGHT = 540;
+
+  const drawCropCanvas = useCallback(
+    (zoomVal: number, offsetVal: { x: number; y: number }, commitToForm = true) => {
+      const canvas = cropCanvasRef.current;
+      const img = loadedImgRef.current;
+      if (!canvas || !img || !img.naturalWidth || !img.naturalHeight) return;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const coverScale = Math.max(CROP_WIDTH / iw, CROP_HEIGHT / ih);
+
+      ctx.clearRect(0, 0, CROP_WIDTH, CROP_HEIGHT);
+      ctx.fillStyle = '#0F0B1A';
+      ctx.fillRect(0, 0, CROP_WIDTH, CROP_HEIGHT);
+
+      // Draw blurred ambient backdrop in case the user zooms out to fit a vertical poster
+      ctx.save();
+      ctx.filter = 'blur(22px) brightness(0.4)';
+      const bgW = iw * coverScale * 1.1;
+      const bgH = ih * coverScale * 1.1;
+      ctx.drawImage(img, (CROP_WIDTH - bgW) / 2, (CROP_HEIGHT - bgH) / 2, bgW, bgH);
+      ctx.restore();
+
+      // Draw sharp cropped/positioned image
+      const drawW = iw * coverScale * zoomVal;
+      const drawH = ih * coverScale * zoomVal;
+      const drawX = (CROP_WIDTH - drawW) / 2 + offsetVal.x;
+      const drawY = (CROP_HEIGHT - drawH) / 2 + offsetVal.y;
+
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      if (commitToForm) {
+        try {
+          const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setEventFormData((prev) => ({ ...prev, imageUrl: croppedDataUrl }));
+        } catch {
+          // Ignore CORS canvas taint if external URL doesn't allow crossOrigin export
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!isEventModalOpen || !eventSourceImage) {
+      loadedImgRef.current = null;
+      return;
+    }
+
+    const img = new window.Image();
+    if (!eventSourceImage.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    img.onload = () => {
+      loadedImgRef.current = img;
+      // Draw with current crop settings; only auto-commit immediately if a new file was uploaded
+      drawCropCanvas(cropZoom, cropOffset, eventSourceImage.startsWith('data:'));
+    };
+    img.src = eventSourceImage;
+  }, [isEventModalOpen, eventSourceImage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCropZoomChange = (newZoom: number) => {
+    const clamped = Math.min(3, Math.max(0.35, Number(newZoom.toFixed(2))));
+    setCropZoom(clamped);
+    drawCropCanvas(clamped, cropOffset, true);
+  };
+
+  const handleFitFullPoster = () => {
+    const img = loadedImgRef.current;
+    if (!img || !img.naturalWidth || !img.naturalHeight) return;
+    const coverScale = Math.max(CROP_WIDTH / img.naturalWidth, CROP_HEIGHT / img.naturalHeight);
+    const containScale = Math.min(CROP_WIDTH / img.naturalWidth, CROP_HEIGHT / img.naturalHeight);
+    const fitZoom = Number((containScale / coverScale).toFixed(2));
+    const resetOffset = { x: 0, y: 0 };
+    setCropZoom(fitZoom);
+    setCropOffset(resetOffset);
+    drawCropCanvas(fitZoom, resetOffset, true);
+  };
+
+  const handleResetCrop = () => {
+    const resetOffset = { x: 0, y: 0 };
+    setCropZoom(1);
+    setCropOffset(resetOffset);
+    drawCropCanvas(1, resetOffset, true);
+  };
+
+  const handleCropPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!loadedImgRef.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingCrop(true);
+    dragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      startX: cropOffset.x,
+      startY: cropOffset.y,
+    };
+  };
+
+  const handleCropPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDraggingCrop || !dragStartRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const scaleX = CROP_WIDTH / (rect.width || 1);
+    const scaleY = CROP_HEIGHT / (rect.height || 1);
+
+    const dx = (e.clientX - dragStartRef.current.clientX) * scaleX;
+    const dy = (e.clientY - dragStartRef.current.clientY) * scaleY;
+
+    const nextOffset = {
+      x: Math.round(dragStartRef.current.startX + dx),
+      y: Math.round(dragStartRef.current.startY + dy),
+    };
+    setCropOffset(nextOffset);
+    drawCropCanvas(cropZoom, nextOffset, false);
+  };
+
+  const handleCropPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDraggingCrop) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setIsDraggingCrop(false);
+    dragStartRef.current = null;
+    drawCropCanvas(cropZoom, cropOffset, true);
+  };
+
   const openCreateEventModal = () => {
     setEditingEventId(null);
+    setEventSourceImage('');
+    setCropZoom(1);
+    setCropOffset({ x: 0, y: 0 });
     setEventFormData({
       title: '',
       description: '',
@@ -209,13 +357,17 @@ export default function AdminDashboardPage() {
   const openEditEventModal = (event: EventItem) => {
     setEditingEventId(event.id);
     const formattedDate = event.date ? new Date(event.date).toISOString().split('T')[0] : '';
+    const existingImg = event.imageUrl || '';
+    setEventSourceImage(existingImg);
+    setCropZoom(1);
+    setCropOffset({ x: 0, y: 0 });
     setEventFormData({
       title: event.title,
       description: event.description,
       date: formattedDate,
       time: event.time,
       venue: event.venue,
-      imageUrl: event.imageUrl || '',
+      imageUrl: existingImg,
       price: event.price,
       capacity: event.capacity,
     });
@@ -226,7 +378,10 @@ export default function AdminDashboardPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const compressedDataUrl = await compressImageToDataUrl(file);
+      const compressedDataUrl = await compressImageToDataUrl(file, 1600, 0.88);
+      setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
+      setEventSourceImage(compressedDataUrl);
       setEventFormData((prev) => ({ ...prev, imageUrl: compressedDataUrl }));
     } catch (err) {
       console.error('Error compressing event image:', err);
@@ -241,10 +396,19 @@ export default function AdminDashboardPage() {
       const url = editingEventId ? `/api/admin/events/${editingEventId}` : '/api/admin/events';
       const method = editingEventId ? 'PUT' : 'POST';
 
+      let finalImageUrl = eventFormData.imageUrl;
+      if (eventSourceImage && cropCanvasRef.current && loadedImgRef.current) {
+        try {
+          finalImageUrl = cropCanvasRef.current.toDataURL('image/jpeg', 0.85);
+        } catch {
+          // Keep existing imageUrl if external URL tainted canvas
+        }
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventFormData),
+        body: JSON.stringify({ ...eventFormData, imageUrl: finalImageUrl }),
       });
 
       if (res.ok) {
@@ -1540,13 +1704,19 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="block font-medium text-gray-300">Event Cover Image</label>
+                  <label className="block font-medium text-gray-300 flex items-center gap-1.5">
+                    <Crop className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Event Cover Image & Crop</span>
+                  </label>
                   {eventFormData.imageUrl && (
                     <button
                       type="button"
-                      onClick={() => setEventFormData({ ...eventFormData, imageUrl: '' })}
+                      onClick={() => {
+                        setEventSourceImage('');
+                        setEventFormData({ ...eventFormData, imageUrl: '' });
+                      }}
                       className="text-[11px] text-red-400 hover:text-red-300 font-semibold transition flex items-center gap-1"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -1555,7 +1725,7 @@ export default function AdminDashboardPage() {
                   )}
                 </div>
 
-                <label className="flex items-center justify-center gap-2 w-full p-4 rounded-xl border-2 border-dashed border-purple-800/60 hover:border-indigo-500 bg-[#0F0B1A] cursor-pointer transition text-gray-300 hover:text-white">
+                <label className="flex items-center justify-center gap-2 w-full p-3.5 rounded-xl border-2 border-dashed border-purple-800/60 hover:border-indigo-500 bg-[#0F0B1A] cursor-pointer transition text-gray-300 hover:text-white">
                   <Upload className="w-4 h-4 text-amber-400" />
                   <span>
                     {eventFormData.imageUrl
@@ -1570,14 +1740,108 @@ export default function AdminDashboardPage() {
                   />
                 </label>
 
-                {eventFormData.imageUrl && (
-                  <div className="relative rounded-xl overflow-hidden border border-purple-900/50 bg-[#0F0B1A] h-40">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={eventFormData.imageUrl}
-                      alt="Event Cover Preview"
-                      className="w-full h-full object-cover"
-                    />
+                {eventSourceImage && (
+                  <div className="space-y-2.5 p-3 rounded-xl bg-[#0F0B1A] border border-purple-900/50">
+                    {/* Interactive 16:9 Crop Canvas */}
+                    <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-purple-800/60 bg-black select-none">
+                      <canvas
+                        ref={cropCanvasRef}
+                        width={CROP_WIDTH}
+                        height={CROP_HEIGHT}
+                        onPointerDown={handleCropPointerDown}
+                        onPointerMove={handleCropPointerMove}
+                        onPointerUp={handleCropPointerUp}
+                        onPointerCancel={handleCropPointerUp}
+                        className="w-full h-full object-cover cursor-move touch-none block"
+                      />
+
+                      {/* Rule-of-thirds grid overlay while dragging */}
+                      {isDraggingCrop && (
+                        <div className="absolute inset-0 pointer-events-none grid grid-cols-3 grid-rows-3">
+                          <div className="border-r border-b border-white/25" />
+                          <div className="border-r border-b border-white/25" />
+                          <div className="border-b border-white/25" />
+                          <div className="border-r border-b border-white/25" />
+                          <div className="border-r border-b border-white/25" />
+                          <div className="border-b border-white/25" />
+                          <div className="border-r border-white/25" />
+                          <div className="border-r border-white/25" />
+                          <div />
+                        </div>
+                      )}
+
+                      <div className="absolute bottom-2 left-2 pointer-events-none px-2 py-1 rounded-md bg-black/65 backdrop-blur-sm text-[10px] text-gray-200 flex items-center gap-1 border border-white/10">
+                        <Move className="w-3 h-3 text-amber-400" />
+                        <span>Drag image to reposition crop</span>
+                      </div>
+                    </div>
+
+                    {/* Zoom & Framing Controls */}
+                    <div className="space-y-2 pt-0.5">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleCropZoomChange(cropZoom - 0.1)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition"
+                          title="Zoom Out"
+                        >
+                          <ZoomOut className="w-3.5 h-3.5" />
+                        </button>
+
+                        <input
+                          type="range"
+                          min="0.35"
+                          max="3"
+                          step="0.05"
+                          value={cropZoom}
+                          onChange={(e) => handleCropZoomChange(parseFloat(e.target.value))}
+                          className="flex-1 accent-indigo-500 h-1.5 bg-purple-950 rounded-lg cursor-pointer"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => handleCropZoomChange(cropZoom + 0.1)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition"
+                          title="Zoom In"
+                        >
+                          <ZoomIn className="w-3.5 h-3.5" />
+                        </button>
+
+                        <span className="text-[11px] font-mono text-indigo-300 w-11 text-right">
+                          {Math.round(cropZoom * 100)}%
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleResetCrop}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-[11px] font-semibold text-indigo-200 flex items-center gap-1 transition"
+                          >
+                            <Crop className="w-3 h-3" />
+                            <span>Fill Banner</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleFitFullPoster}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-[11px] font-semibold text-amber-300 flex items-center gap-1 transition"
+                          >
+                            <Maximize2 className="w-3 h-3" />
+                            <span>Fit Full Poster</span>
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleResetCrop}
+                          className="px-2 py-1 rounded-lg text-[11px] text-gray-400 hover:text-white flex items-center gap-1 transition"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
