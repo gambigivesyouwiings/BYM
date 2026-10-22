@@ -76,7 +76,7 @@ export default function RegistrationModal({
   const [searchingLookup, setSearchingLookup] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
   const [existingReservations, setExistingReservations] = useState<any[]>([]);
-  const [payMethodExisting, setPayMethodExisting] = useState<'stk_push' | 'manual_code' | 'upload_screenshot'>('stk_push');
+  const [payMethodExisting, setPayMethodExisting] = useState<'stk_push' | 'manual_code' | 'upload_screenshot'>('manual_code');
   const [existingMpesaCode, setExistingMpesaCode] = useState('');
   const [existingScreenshotFile, setExistingScreenshotFile] = useState<File | null>(null);
   const [existingScreenshotPreview, setExistingScreenshotPreview] = useState<string | null>(null);
@@ -658,25 +658,49 @@ export default function RegistrationModal({
                           </div>
 
                           {payMethodExisting === 'stk_push' && (
-                            <div className="space-y-2">
-                              <button
-                                type="button"
-                                onClick={() => handleTriggerStkPush(totalExistingDue, lookupQuery)}
-                                disabled={stkLoading || !lookupQuery}
-                                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition"
-                              >
-                                {stkLoading ? (
-                                  <>
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    <span>Sending prompt...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Smartphone className="w-3.5 h-3.5" />
-                                    <span>Send STK Push for {formatCurrency(totalExistingDue)}</span>
-                                  </>
-                                )}
-                              </button>
+                            <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 space-y-2 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-white flex items-center gap-1.5">
+                                  <Smartphone className="w-4 h-4 text-emerald-400" />
+                                  STK Push Prompt
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  Coming Soon
+                                </span>
+                              </div>
+                              <p className="text-gray-300">
+                                Automated STK Push is coming soon! For now, please send{' '}
+                                <strong className="text-amber-400">{formatCurrency(totalExistingDue)}</strong> via M-Pesa Send Money to{' '}
+                                <strong className="text-white">0704390997 (Belinda Muthee)</strong>, then submit your M-Pesa code or screenshot.
+                              </p>
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setPayMethodExisting('manual_code')}
+                                  className="flex-1 py-2 px-3 rounded-lg bg-amber-600/30 hover:bg-amber-600/40 border border-amber-500/40 text-amber-200 font-semibold text-xs transition"
+                                >
+                                  Enter M-Pesa Code
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPayMethodExisting('upload_screenshot')}
+                                  className="flex-1 py-2 px-3 rounded-lg bg-purple-600/30 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 font-semibold text-xs transition"
+                                >
+                                  Upload Screenshot
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {(payMethodExisting === 'manual_code' || payMethodExisting === 'upload_screenshot') && (
+                            <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs space-y-1 text-purple-200">
+                              <p className="font-bold text-amber-400 flex items-center gap-1.5">
+                                <CreditCard className="w-3.5 h-3.5" />
+                                M-Pesa Payment Details
+                              </p>
+                              <p>1. Send Money To: <strong className="text-white font-mono">0704390997</strong></p>
+                              <p>2. Recipient Name: <strong className="text-white">Belinda Muthee</strong></p>
+                              <p>3. Total Amount: <strong className="text-amber-400">{formatCurrency(totalExistingDue)}</strong></p>
                             </div>
                           )}
 
@@ -1047,51 +1071,55 @@ export default function RegistrationModal({
                     )}
 
                     {paymentOption === 'stk_push' && (
-                      <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 space-y-3 text-xs">
-                        <div className="space-y-1">
+                      <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
                           <p className="font-bold text-white flex items-center gap-1.5">
                             <Smartphone className="w-4 h-4 text-emerald-400" />
-                            Prompt to Your Phone (Lipa Na M-Pesa)
+                            Prompt to Your Phone (STK Push)
                           </p>
-                          <p className="text-gray-300">
-                            Click below to send a payment request of{' '}
-                            <strong className="text-amber-400">{formatCurrency(totalPrice)}</strong> ({ticketCount} tickets) directly to {formData.phone || 'your phone number'}.
-                          </p>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Coming Soon
+                          </span>
                         </div>
+                        <p className="text-gray-300">
+                          Automated STK Push is coming soon! For now, please send{' '}
+                          <strong className="text-amber-400">{formatCurrency(totalPrice)}</strong> ({ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'}) via M-Pesa Send Money to{' '}
+                          <strong className="text-white">0704390997 (Belinda Muthee)</strong>, then enter your M-Pesa code or upload a screenshot.
+                        </p>
 
-                        <button
-                          type="button"
-                          onClick={() => handleTriggerStkPush(totalPrice, formData.phone)}
-                          disabled={stkLoading || !formData.phone}
-                          className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition shadow-lg shadow-emerald-950"
-                        >
-                          {stkLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Requesting M-Pesa Prompt...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Smartphone className="w-4 h-4" />
-                              <span>Trigger STK Push for {formatCurrency(totalPrice)}</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentOption('manual_code')}
+                            className="flex-1 py-2 px-3 rounded-lg bg-amber-600/30 hover:bg-amber-600/40 border border-amber-500/40 text-amber-200 font-semibold text-xs transition"
+                          >
+                            Enter M-Pesa Code
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentOption('upload_screenshot')}
+                            className="flex-1 py-2 px-3 rounded-lg bg-purple-600/30 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 font-semibold text-xs transition"
+                          >
+                            Upload Proof
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {(paymentOption === 'manual_code' || paymentOption === 'upload_screenshot') && (
+                      <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs space-y-1 text-purple-200">
+                        <p className="font-bold text-amber-400 flex items-center gap-1.5">
+                          <CreditCard className="w-4 h-4" />
+                          M-Pesa Payment Details
+                        </p>
+                        <p>1. Send Money To: <strong className="text-white font-mono">0704390997</strong></p>
+                        <p>2. Recipient Name: <strong className="text-white">Belinda Muthee</strong></p>
+                        <p>3. Total Amount: <strong className="text-amber-400">{formatCurrency(totalPrice)}</strong> ({ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'})</p>
                       </div>
                     )}
 
                     {paymentOption === 'manual_code' && (
                       <div className="space-y-3">
-                        <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs space-y-1 text-purple-200">
-                          <p className="font-bold text-amber-400 flex items-center gap-1.5">
-                            <CreditCard className="w-4 h-4" />
-                            Manual M-Pesa Payment Details
-                          </p>
-                          <p>1. Paybill: <strong className="text-white">174379</strong></p>
-                          <p>2. Account Number: <strong className="text-white">BEYOND-{event.id.slice(-4).toUpperCase()}</strong></p>
-                          <p>3. Total Amount: <strong className="text-amber-400">{formatCurrency(totalPrice)}</strong> ({ticketCount} tickets)</p>
-                        </div>
-
                         <div>
                           <label className="block text-xs font-medium text-gray-300 mb-1">
                             M-Pesa Transaction Reference Code

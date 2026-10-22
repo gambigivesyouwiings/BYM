@@ -60,7 +60,7 @@ export default function MyTicketsPage() {
 
   // Payment modal/state for an event's unpaid tickets
   const [payingEventId, setPayingEventId] = useState<string | null>(null);
-  const [payMethod, setPayMethod] = useState<'stk_push' | 'manual_code' | 'upload_screenshot'>('stk_push');
+  const [payMethod, setPayMethod] = useState<'stk_push' | 'manual_code' | 'upload_screenshot'>('manual_code');
   const [stkPhone, setStkPhone] = useState('');
   const [mpesaCode, setMpesaCode] = useState('');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
@@ -558,51 +558,51 @@ export default function MyTicketsPage() {
                               </div>
                             )}
 
-                            {/* Option 1: STK Push */}
+                            {/* Option 1: STK Push (Coming Soon) */}
                             {payMethod === 'stk_push' && (
-                              <div className="space-y-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                                    M-Pesa Phone Number
-                                  </label>
-                                  <input
-                                    type="tel"
-                                    value={stkPhone}
-                                    onChange={(e) => setStkPhone(e.target.value)}
-                                    placeholder="0712345678"
-                                    className="w-full px-3.5 py-2.5 rounded-xl bg-background border border-white/10 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-primary-500"
-                                  />
+                              <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/20 text-center space-y-2.5">
+                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>Coming Soon</span>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleTriggerStkPush(totalDue, event.id)}
-                                  disabled={stkLoading || !stkPhone}
-                                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 disabled:opacity-50 transition"
-                                >
-                                  {stkLoading ? (
-                                    <>
-                                      <Loader2 className="w-4 h-4 animate-spin" />
-                                      Sending prompt for {formatCurrency(totalDue)}...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Smartphone className="w-4 h-4" />
-                                      Send Lipa Na M-Pesa Prompt ({formatCurrency(totalDue)})
-                                    </>
-                                  )}
-                                </button>
+                                <p className="text-xs font-semibold text-white">
+                                  Automated M-Pesa Express (STK Push) is coming soon!
+                                </p>
+                                <p className="text-xs text-slate-300 leading-relaxed">
+                                  Please send money via M-Pesa to <strong className="text-emerald-400">0704390997</strong> (<strong className="text-white">Belinda Muthee</strong>), then submit your M-Pesa code or upload a screenshot.
+                                </p>
+                                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setPayMethod('manual_code')}
+                                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-semibold transition"
+                                  >
+                                    Enter M-Pesa Code
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPayMethod('upload_screenshot')}
+                                    className="px-3 py-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 text-purple-300 text-xs font-semibold transition"
+                                  >
+                                    Upload Screenshot
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* M-Pesa Payment Instructions for Manual Code & Screenshot */}
+                            {(payMethod === 'manual_code' || payMethod === 'upload_screenshot') && (
+                              <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs space-y-1 text-purple-200">
+                                <p className="font-bold text-amber-400">M-Pesa Payment Details:</p>
+                                <p>1. Send Money To: <strong className="text-white font-mono text-sm">0704390997</strong></p>
+                                <p>2. Recipient Name: <strong className="text-white">Belinda Muthee</strong></p>
+                                <p>3. Amount: <strong className="text-amber-400">{formatCurrency(totalDue)}</strong></p>
                               </div>
                             )}
 
                             {/* Option 2: Manual Code */}
                             {payMethod === 'manual_code' && (
                               <div className="space-y-3">
-                                <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40 text-xs space-y-1 text-purple-200">
-                                  <p className="font-bold text-amber-400">Paybill Payment Instructions:</p>
-                                  <p>1. Paybill: <strong className="text-white">174379</strong></p>
-                                  <p>2. Account: <strong className="text-white">BEYOND-{event.id.slice(-4).toUpperCase()}</strong></p>
-                                  <p>3. Amount: <strong className="text-amber-400">{formatCurrency(totalDue)}</strong></p>
-                                </div>
                                 <div>
                                   <label className="block text-xs font-medium text-slate-300 mb-1">
                                     M-Pesa Reference Code
