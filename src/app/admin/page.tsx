@@ -219,6 +219,18 @@ export default function AdminDashboardPage() {
     setIsEventModalOpen(true);
   };
 
+  const handleEventFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        setEventFormData((prev) => ({ ...prev, imageUrl: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     setEventLoading(true);
@@ -683,6 +695,17 @@ export default function AdminDashboardPage() {
                     }}
                     className="group rounded-2xl bg-[#16102B] border border-purple-900/40 hover:border-indigo-500/80 hover:bg-[#1A1333] transition-all duration-200 overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-purple-950/60 flex flex-col justify-between cursor-pointer relative"
                   >
+                    {event.imageUrl && (
+                      <div className="relative h-36 w-full bg-[#0F0B1A] overflow-hidden border-b border-purple-900/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={event.imageUrl}
+                          alt={event.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#16102B] via-transparent to-transparent" />
+                      </div>
+                    )}
                     <div className="p-6 space-y-4">
                       {/* Top Bar with Title and Price */}
                       <div className="flex items-start justify-between gap-3">
@@ -1508,15 +1531,46 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-medium text-gray-300 mb-1">Cover Image URL</label>
-                <input
-                  type="url"
-                  value={eventFormData.imageUrl}
-                  onChange={(e) => setEventFormData({ ...eventFormData, imageUrl: e.target.value })}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0F0B1A] border border-purple-900/50 text-white text-sm focus:outline-none focus:border-indigo-500"
-                />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block font-medium text-gray-300">Event Cover Image</label>
+                  {eventFormData.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setEventFormData({ ...eventFormData, imageUrl: '' })}
+                      className="text-[11px] text-red-400 hover:text-red-300 font-semibold transition flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Remove Image</span>
+                    </button>
+                  )}
+                </div>
+
+                <label className="flex items-center justify-center gap-2 w-full p-4 rounded-xl border-2 border-dashed border-purple-800/60 hover:border-indigo-500 bg-[#0F0B1A] cursor-pointer transition text-gray-300 hover:text-white">
+                  <Upload className="w-4 h-4 text-amber-400" />
+                  <span>
+                    {eventFormData.imageUrl
+                      ? 'Choose Another Image from Device (JPG / PNG / WEBP)'
+                      : 'Upload Cover Image from Device (JPG / PNG / WEBP)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleEventFileUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                {eventFormData.imageUrl && (
+                  <div className="relative rounded-xl overflow-hidden border border-purple-900/50 bg-[#0F0B1A] h-40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={eventFormData.imageUrl}
+                      alt="Event Cover Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3">
