@@ -21,6 +21,8 @@ import {
   Info,
   Search,
   CheckCircle2,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 import EventParticipantsList, { PublicParticipant } from './EventParticipantsList';
@@ -66,12 +68,13 @@ export default function RegistrationModal({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [registeredBatch, setRegisteredBatch] = useState<string[]>([]);
+  const [lastSubmittedContact, setLastSubmittedContact] = useState('');
 
   const [activeModalTab, setActiveModalTab] = useState<'register' | 'attendees' | 'pay_existing'>('register');
   const [participants, setParticipants] = useState<PublicParticipant[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
 
-  // Pay Existing Reservation state
+  // Pay / Edit Existing Reservation state
   const [lookupQuery, setLookupQuery] = useState('');
   const [searchingLookup, setSearchingLookup] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
@@ -83,6 +86,16 @@ export default function RegistrationModal({
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [paymentConfirmSuccess, setPaymentConfirmSuccess] = useState<string | null>(null);
   const existingFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Inline Ticket Editing state
+  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    payerName: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (isOpen && event?.id) {
@@ -203,8 +216,9 @@ export default function RegistrationModal({
     }
   };
 
-  const handleLookupReservations = async () => {
-    if (!lookupQuery.trim() || lookupQuery.trim().length < 3) {
+  const handleLookupReservations = async (customQuery?: string) => {
+    const q = (customQuery ?? lookupQuery).trim();
+    if (!q || q.length < 3) {
       setError('Please enter your phone number or email.');
       return;
     }
@@ -212,9 +226,10 @@ export default function RegistrationModal({
     setSearchingLookup(true);
     setError(null);
     setPaymentConfirmSuccess(null);
+    setEditingRegId(null);
 
     try {
-      const res = await fetch(`/api/reservations/lookup?query=${encodeURIComponent(lookupQuery.trim())}&eventId=${event.id}`);
+      const res = await fetch(`/api/reservations/lookup?query=${encodeURIComponent(q)}&eventId=${event.id}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -231,6 +246,69 @@ export default function RegistrationModal({
       }
     } finally {
       setSearchingLookup(false);
+    }
+  };
+
+  const handleStartEdit = (reg: any) => {
+    setEditingRegId(reg.id);
+    setEditForm({
+      name: reg.name || '',
+      email: reg.email || '',
+      phone: reg.phone || '',
+      payerName: reg.payerName || '',
+    });
+    setError(null);
+    setPaymentConfirmSuccess(null);
+  };
+
+  const handleSaveEdit = async (regId: string) => {
+    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.phone.trim()) {
+      setError('Participant name, email, and phone number are required.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setError(null);
+    setPaymentConfirmSuccess(null);
+
+    try {
+      const res = await fetch(`/api/reservations/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          phone: editForm.phone.trim(),
+          payerName: editForm.payerName.trim() || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update ticket details.');
+      }
+
+      setExistingReservations((prev) =>
+        prev.map((r) => (r.id === regId ? data.registration : r))
+      );
+      setEditingRegId(null);
+      setPaymentConfirmSuccess(data.message || 'Ticket details updated successfully!');
+
+      // Refresh public participants roster
+      if (event?.id) {
+        fetch(`/api/events/${event.id}/participants`)
+          .then((r) => r.json())
+          .then((d) => setParticipants(d.participants || []))
+          .catch((err) => console.error(err));
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to update ticket details.');
+      }
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -335,6 +413,8 @@ export default function RegistrationModal({
         throw new Error(data.error || 'Failed to complete registration.');
       }
 
+      const contactUsed = formData.phone.trim() || formData.email.trim();
+      setLastSubmittedContact(contactUsed);
       setSuccessMessage(data.message || 'Registration successfully submitted!');
       setRegisteredBatch(cleanedNames);
       setParticipantNames(['']);
@@ -434,23 +514,21 @@ export default function RegistrationModal({
               <span>Register Tickets</span>
             </button>
 
-            {event.price > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModalTab('pay_existing');
-                  setError(null);
-                }}
-                className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                  activeModalTab === 'pay_existing'
-                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
-                    : 'bg-white/5 text-gray-400 border-white/5 hover:text-white'
-                }`}
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>Pay for Reserved</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setActiveModalTab('pay_existing');
+                setError(null);
+              }}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
+                activeModalTab === 'pay_existing'
+                  ? 'bg-emerald-600 text-white border-emerald-500 shadow-md'
+                  : 'bg-white/5 text-gray-400 border-white/5 hover:text-white'
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>{event.price > 0 ? 'Edit / Pay Reserved' : 'Edit My Tickets'}</span>
+            </button>
 
             <button
               type="button"
@@ -489,16 +567,16 @@ export default function RegistrationModal({
             </div>
           )}
 
-          {/* TAB 2: PAY FOR EXISTING RESERVATION */}
+          {/* TAB 2: EDIT / PAY FOR EXISTING RESERVATION */}
           {activeModalTab === 'pay_existing' && (
             <div className="space-y-5">
               <div className="space-y-1">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-emerald-400" />
-                  <span>Find Your Provisional Reservation</span>
+                  <Edit3 className="w-4 h-4 text-emerald-400" />
+                  <span>Find & Edit Your Ticket Reservation</span>
                 </h4>
                 <p className="text-xs text-gray-400">
-                  Enter your mobile phone number or email to view your unpaid spots and pay via M-Pesa.
+                  Enter your mobile phone number or email to edit your attendee details{event.price > 0 ? ' or pay via M-Pesa' : ''}.
                 </p>
               </div>
 
@@ -526,7 +604,7 @@ export default function RegistrationModal({
                   ) : (
                     <Search className="w-3.5 h-3.5" />
                   )}
-                  <span>Find Reservation</span>
+                  <span>Find Tickets</span>
                 </button>
               </form>
 
@@ -564,7 +642,7 @@ export default function RegistrationModal({
                     <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-gray-300">
-                          {existingReservations.length} Reservation(s) Found
+                          {existingReservations.length} Ticket(s) Found
                         </span>
                         {unpaidExisting.length > 0 && (
                           <span className="text-amber-400 font-bold">
@@ -573,35 +651,157 @@ export default function RegistrationModal({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {existingReservations.map((reg) => (
-                          <div
-                            key={reg.id}
-                            className="p-3 rounded-xl bg-[#0F0B1A] border border-purple-900/40 flex items-center justify-between gap-2 text-xs"
-                          >
-                            <div>
-                              <p className="font-semibold text-white">{reg.name}</p>
-                              <span className="text-[10px] text-gray-500 block">
-                                Ref: #{reg.id.slice(-6).toUpperCase()}
-                              </span>
-                            </div>
-                            <div>
-                              {reg.status === 'confirmed' || reg.status === 'attended' ? (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">
-                                  Confirmed
-                                </span>
-                              ) : reg.status === 'payment_uploaded' ? (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
-                                  In Review
-                                </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {existingReservations.map((reg) => {
+                          const isEditing = editingRegId === reg.id;
+                          return (
+                            <div
+                              key={reg.id}
+                              className={`p-3 rounded-xl bg-[#0F0B1A] border text-xs transition ${
+                                isEditing
+                                  ? 'border-indigo-500/60 sm:col-span-2 space-y-3'
+                                  : 'border-purple-900/40 flex items-start justify-between gap-2'
+                              }`}
+                            >
+                              {isEditing ? (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
+                                    <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                      Edit Ticket (#{reg.id.slice(-6).toUpperCase()})
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingRegId(null)}
+                                      className="p-1 rounded-lg text-gray-400 hover:text-white"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                                        Attendee Full Name *
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={editForm.name}
+                                        onChange={(e) =>
+                                          setEditForm({ ...editForm, name: e.target.value })
+                                        }
+                                        className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-purple-800/50 text-white text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                                        Phone Number *
+                                      </label>
+                                      <input
+                                        type="tel"
+                                        value={editForm.phone}
+                                        onChange={(e) =>
+                                          setEditForm({ ...editForm, phone: e.target.value })
+                                        }
+                                        className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-purple-800/50 text-white text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                                        Email Address *
+                                      </label>
+                                      <input
+                                        type="email"
+                                        value={editForm.email}
+                                        onChange={(e) =>
+                                          setEditForm({ ...editForm, email: e.target.value })
+                                        }
+                                        className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-purple-800/50 text-white text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] font-medium text-gray-400 mb-1">
+                                        Booked By / Coordinator (Optional)
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={editForm.payerName}
+                                        onChange={(e) =>
+                                          setEditForm({ ...editForm, payerName: e.target.value })
+                                        }
+                                        className="w-full px-3 py-1.5 rounded-lg bg-white/5 border border-purple-800/50 text-white text-xs focus:outline-none focus:border-indigo-500"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center justify-end gap-2 pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingRegId(null)}
+                                      disabled={savingEdit}
+                                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold transition"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveEdit(reg.id)}
+                                      disabled={savingEdit}
+                                      className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                                    >
+                                      {savingEdit ? (
+                                        <>
+                                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                          Saving...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Save className="w-3.5 h-3.5" />
+                                          Save
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
                               ) : (
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300">
-                                  Unpaid
-                                </span>
+                                <>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <p className="font-semibold text-white truncate">{reg.name}</p>
+                                    <span className="text-[10px] text-gray-400 block truncate">
+                                      {reg.phone} • {reg.email}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 block">
+                                      Ref: #{reg.id.slice(-6).toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                    {reg.status === 'confirmed' || reg.status === 'attended' ? (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400">
+                                        Confirmed
+                                      </span>
+                                    ) : reg.status === 'payment_uploaded' ? (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300">
+                                        In Review
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300">
+                                        Unpaid
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEdit(reg)}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 text-[10px] font-semibold transition"
+                                    >
+                                      <Edit3 className="w-2.5 h-2.5" />
+                                      Edit
+                                    </button>
+                                  </div>
+                                </>
                               )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {unpaidExisting.length > 0 ? (
@@ -827,7 +1027,21 @@ export default function RegistrationModal({
                   </div>
                 )}
 
-                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+                  {lastSubmittedContact && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveModalTab('pay_existing');
+                        setLookupQuery(lastSubmittedContact);
+                        handleLookupReservations(lastSubmittedContact);
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>View / Edit Ticket Details</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

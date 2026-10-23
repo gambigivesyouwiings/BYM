@@ -21,6 +21,8 @@ import {
   Search,
   BookmarkCheck,
   CheckCircle2,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import { formatCurrency, compressImageToDataUrl } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
@@ -53,7 +55,7 @@ export default function EventRegistrationClient({
 }: EventRegistrationClientProps) {
   const router = useRouter();
   
-  // Tab mode: 'register' = New booking, 'pay_existing' = Pay for an existing provisional reservation
+  // Tab mode: 'register' = New booking, 'pay_existing' = Edit / Pay for an existing reservation
   const [activeMode, setActiveMode] = useState<'register' | 'pay_existing'>('register');
 
   // New Registration State
@@ -76,7 +78,7 @@ export default function EventRegistrationClient({
   const [stkStatus, setStkStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Pay Existing Reservation State
+  // Pay / Edit Existing Reservation State
   const [lookupQuery, setLookupQuery] = useState('');
   const [searchingLookup, setSearchingLookup] = useState(false);
   const [lookupDone, setLookupDone] = useState(false);
@@ -88,6 +90,16 @@ export default function EventRegistrationClient({
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [paymentConfirmSuccess, setPaymentConfirmSuccess] = useState<string | null>(null);
   const existingFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Ticket Editing State
+  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    payerName: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const ticketCount = participantNames.length;
   const totalPrice = event.price * ticketCount;
@@ -205,6 +217,7 @@ export default function EventRegistrationClient({
     setSearchingLookup(true);
     setError(null);
     setPaymentConfirmSuccess(null);
+    setEditingRegId(null);
 
     try {
       const res = await fetch(`/api/reservations/lookup?query=${encodeURIComponent(q)}&eventId=${event.id}`);
@@ -224,6 +237,62 @@ export default function EventRegistrationClient({
       }
     } finally {
       setSearchingLookup(false);
+    }
+  };
+
+  const handleStartEdit = (reg: FoundReservation) => {
+    setEditingRegId(reg.id);
+    setEditForm({
+      name: reg.name,
+      email: reg.email,
+      phone: reg.phone,
+      payerName: reg.payerName || '',
+    });
+    setError(null);
+    setPaymentConfirmSuccess(null);
+  };
+
+  const handleSaveEdit = async (regId: string) => {
+    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.phone.trim()) {
+      setError('Participant name, email, and phone number are required.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setError(null);
+    setPaymentConfirmSuccess(null);
+
+    try {
+      const res = await fetch(`/api/reservations/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          phone: editForm.phone.trim(),
+          payerName: editForm.payerName.trim() || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update ticket details.');
+      }
+
+      setExistingReservations((prev) =>
+        prev.map((r) => (r.id === regId ? data.registration : r))
+      );
+      setEditingRegId(null);
+      setPaymentConfirmSuccess(data.message || 'Ticket details updated successfully!');
+      router.refresh();
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to update ticket details.');
+      }
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -398,20 +467,22 @@ export default function EventRegistrationClient({
         )}
 
         <div className="space-y-2 pt-2">
-          {event.price > 0 && (
-            <button
-              onClick={() => {
-                setActiveMode('pay_existing');
-                setLookupQuery(lastUsedPhone);
-                handleLookupReservations(lastUsedPhone);
-                setSuccess(null);
-              }}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950"
-            >
-              <CreditCard className="w-4 h-4" />
-              <span>Pay & Upload M-Pesa Receipt Now</span>
-            </button>
-          )}
+          <button
+            onClick={() => {
+              setActiveMode('pay_existing');
+              setLookupQuery(lastUsedPhone);
+              handleLookupReservations(lastUsedPhone);
+              setSuccess(null);
+            }}
+            className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950"
+          >
+            <Edit3 className="w-4 h-4" />
+            <span>
+              {event.price > 0
+                ? 'Edit Ticket Details / Pay Now'
+                : 'View & Edit Ticket Details'}
+            </span>
+          </button>
 
           <button
             onClick={() => {
@@ -464,8 +535,8 @@ export default function EventRegistrationClient({
               : 'text-slate-400 hover:text-emerald-400'
           }`}
         >
-          <CreditCard className="w-3.5 h-3.5" />
-          <span>Pay for Reserved</span>
+          <Edit3 className="w-3.5 h-3.5" />
+          <span>{event.price > 0 ? 'Edit / Pay Tickets' : 'Edit My Tickets'}</span>
         </button>
       </div>
 
@@ -813,17 +884,17 @@ export default function EventRegistrationClient({
       )}
 
       {/* ========================================================================= */}
-      {/* MODE 2: COMPLETE PAYMENT FOR EXISTING RESERVATION                          */}
+      {/* MODE 2: EDIT / COMPLETE PAYMENT FOR EXISTING RESERVATION                   */}
       {/* ========================================================================= */}
       {activeMode === 'pay_existing' && (
         <div className="space-y-4">
           <div className="space-y-1">
             <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-              <CreditCard className="w-4 h-4 text-emerald-400" />
-              <span>Complete Payment for Reserved Spot</span>
+              <Edit3 className="w-4 h-4 text-emerald-400" />
+              <span>Edit Ticket Details & Manage Payment</span>
             </h4>
             <p className="text-xs text-slate-400">
-              Enter the phone number or email used during reservation to pay or submit proof.
+              Enter the phone number or email used during registration to edit your ticket details{event.price > 0 ? ' or submit payment proof' : ''}.
             </p>
           </div>
 
@@ -869,7 +940,7 @@ export default function EventRegistrationClient({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-slate-300">
-                      Found {existingReservations.length} Reservation(s):
+                      Found {existingReservations.length} Ticket(s):
                     </span>
                     {unpaidExisting.length > 0 && (
                       <span className="text-accent font-bold">
@@ -879,34 +950,160 @@ export default function EventRegistrationClient({
                   </div>
 
                   <div className="space-y-2">
-                    {existingReservations.map((reg) => (
-                      <div
-                        key={reg.id}
-                        className="p-3 rounded-xl bg-background border border-white/10 flex items-center justify-between gap-2 text-xs"
-                      >
-                        <div>
-                          <p className="font-semibold text-white">{reg.name}</p>
-                          <span className="text-[10px] text-slate-500">
-                            Booked: {new Date(reg.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                        <div>
-                          {reg.status === 'confirmed' || reg.status === 'attended' ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              Confirmed
-                            </span>
-                          ) : reg.status === 'payment_uploaded' ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                              Payment Under Review
-                            </span>
+                    {existingReservations.map((reg) => {
+                      const isEditing = editingRegId === reg.id;
+
+                      return (
+                        <div
+                          key={reg.id}
+                          className={`p-3 rounded-xl bg-background border text-xs transition ${
+                            isEditing
+                              ? 'border-primary-500/50 space-y-3'
+                              : 'border-white/10 flex items-start justify-between gap-2'
+                          }`}
+                        >
+                          {isEditing ? (
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                <span className="font-bold text-primary-300 flex items-center gap-1.5">
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                  Edit Ticket (#{reg.id.slice(-6).toUpperCase()})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRegId(null)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-white"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
+                                    Attendee Full Name *
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, name: e.target.value })
+                                    }
+                                    className="w-full px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
+                                    Phone Number *
+                                  </label>
+                                  <input
+                                    type="tel"
+                                    value={editForm.phone}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, phone: e.target.value })
+                                    }
+                                    className="w-full px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
+                                    Email Address *
+                                  </label>
+                                  <input
+                                    type="email"
+                                    value={editForm.email}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, email: e.target.value })
+                                    }
+                                    className="w-full px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
+                                    Booked By / Coordinator (Optional)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editForm.payerName}
+                                    onChange={(e) =>
+                                      setEditForm({ ...editForm, payerName: e.target.value })
+                                    }
+                                    className="w-full px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingRegId(null)}
+                                  disabled={savingEdit}
+                                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEdit(reg.id)}
+                                  disabled={savingEdit}
+                                  className="px-3.5 py-1.5 rounded-lg bg-brand-gradient hover:opacity-90 text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                                >
+                                  {savingEdit ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      Saving...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="w-3.5 h-3.5" />
+                                      Save
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                              Unpaid RSVP
-                            </span>
+                            <>
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="font-semibold text-white truncate">{reg.name}</p>
+                                <span className="text-[10px] text-slate-400 block truncate">
+                                  {reg.phone} • {reg.email}
+                                </span>
+                                <span className="text-[10px] text-slate-500 block">
+                                  Booked: {new Date(reg.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                {reg.status === 'confirmed' || reg.status === 'attended' ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    Confirmed
+                                  </span>
+                                ) : reg.status === 'payment_uploaded' ? (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                    Payment Under Review
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                    Unpaid RSVP
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEdit(reg)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[10px] font-semibold transition"
+                                >
+                                  <Edit3 className="w-2.5 h-2.5" />
+                                  Edit
+                                </button>
+                              </div>
+                            </>
                           )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Payment Options if there are unpaid spots */}

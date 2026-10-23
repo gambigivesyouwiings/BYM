@@ -23,6 +23,10 @@ import {
   User,
   Users,
   Eye,
+  Edit3,
+  Save,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import { formatCurrency, formatDate, compressImageToDataUrl } from '@/lib/utils';
 
@@ -71,6 +75,71 @@ export default function MyTicketsPage() {
   const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Ticket Editing State
+  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    payerName: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const handleStartEdit = (reg: RegistrationRecord) => {
+    setEditingRegId(reg.id);
+    setEditForm({
+      name: reg.name,
+      email: reg.email,
+      phone: reg.phone,
+      payerName: reg.payerName || '',
+    });
+    setError(null);
+    setPaymentSuccess(null);
+  };
+
+  const handleSaveEdit = async (regId: string) => {
+    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.phone.trim()) {
+      setError('Participant name, email, and phone number are required.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setError(null);
+    setPaymentSuccess(null);
+
+    try {
+      const res = await fetch(`/api/reservations/${regId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          phone: editForm.phone.trim(),
+          payerName: editForm.payerName.trim() || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to update ticket details.');
+      }
+
+      setRegistrations((prev) =>
+        prev.map((r) => (r.id === regId ? data.registration : r))
+      );
+      setEditingRegId(null);
+      setPaymentSuccess(data.message || 'Ticket details updated successfully!');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An error occurred while updating ticket details.');
+      }
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleSearch = async (searchVal?: string) => {
     const val = (searchVal || query).trim();
     if (!val || val.length < 3) {
@@ -82,6 +151,7 @@ export default function MyTicketsPage() {
     setError(null);
     setPaymentSuccess(null);
     setPayingEventId(null);
+    setEditingRegId(null);
 
     try {
       const res = await fetch(`/api/reservations/lookup?query=${encodeURIComponent(val)}`);
@@ -249,7 +319,7 @@ export default function MyTicketsPage() {
             Find My <span className="gradient-text">Tickets & Pay</span>
           </h1>
           <p className="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
-            Reserved a spot provisionally? Enter your mobile phone number or email to complete your payment, upload an M-Pesa screenshot, or check your admission status.
+            Registered for an event? Enter your mobile phone number or email to view or edit your ticket details, complete payment, upload an M-Pesa screenshot, or check your admission status.
           </p>
         </div>
 
@@ -403,58 +473,197 @@ export default function MyTicketsPage() {
 
                       {/* Attendee Tickets List */}
                       <div className="p-6 space-y-3">
-                        <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                          Registered Attendees
-                        </h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Registered Attendees
+                          </h4>
+                          <span className="text-[11px] text-slate-500">
+                            Click &ldquo;Edit&rdquo; on any ticket to update attendee details
+                          </span>
+                        </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {regs.map((reg) => {
                             const isConfirmed = reg.status === 'confirmed' || reg.status === 'attended';
                             const isReview = reg.status === 'payment_uploaded';
-                            const isProvisional = reg.status === 'provisional';
+                            const isEditing = editingRegId === reg.id;
 
                             return (
                               <div
                                 key={reg.id}
-                                className="p-3.5 rounded-xl bg-background border border-white/5 flex items-start justify-between gap-3"
+                                className={`p-3.5 rounded-xl bg-background border transition ${
+                                  isEditing
+                                    ? 'border-primary-500/50 sm:col-span-2 space-y-3'
+                                    : 'border-white/5 flex items-start justify-between gap-3'
+                                }`}
                               >
-                                <div>
-                                  <h5 className="text-sm font-semibold text-white">
-                                    {reg.name}
-                                  </h5>
-                                  {reg.payerName && reg.payerName !== reg.name && (
-                                    <span className="text-[10px] text-amber-300/80 block mt-0.5">
-                                      Booked by: {reg.payerName}
-                                    </span>
-                                  )}
-                                  <span className="text-[10px] text-slate-500 block mt-0.5">
-                                    Ref: #{reg.id.slice(-6).toUpperCase()} • {new Date(reg.createdAt).toLocaleDateString()}
-                                  </span>
-                                  {reg.mpesaCode && (
-                                    <span className="text-[10px] text-indigo-300 font-mono block mt-0.5">
-                                      M-Pesa: {reg.mpesaCode}
-                                    </span>
-                                  )}
-                                </div>
+                                {isEditing ? (
+                                  <div className="space-y-3">
+                                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                      <span className="text-xs font-bold text-primary-300 flex items-center gap-1.5">
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                        Edit Ticket Details (#{reg.id.slice(-6).toUpperCase()})
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingRegId(null)}
+                                        className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
 
-                                <div className="shrink-0">
-                                  {isConfirmed ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                      <CheckCircle2 className="w-3.5 h-3.5" />
-                                      Confirmed
-                                    </span>
-                                  ) : isReview ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                      <Clock className="w-3.5 h-3.5" />
-                                      Payment Under Review
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                                      <BookmarkCheck className="w-3.5 h-3.5" />
-                                      Provisional RSVP
-                                    </span>
-                                  )}
-                                </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                                          Attendee Full Name *
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={editForm.name}
+                                          onChange={(e) =>
+                                            setEditForm({ ...editForm, name: e.target.value })
+                                          }
+                                          placeholder="Full Name"
+                                          className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                                          Phone Number *
+                                        </label>
+                                        <input
+                                          type="tel"
+                                          value={editForm.phone}
+                                          onChange={(e) =>
+                                            setEditForm({ ...editForm, phone: e.target.value })
+                                          }
+                                          placeholder="0712345678"
+                                          className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                                          Email Address *
+                                        </label>
+                                        <input
+                                          type="email"
+                                          value={editForm.email}
+                                          onChange={(e) =>
+                                            setEditForm({ ...editForm, email: e.target.value })
+                                          }
+                                          placeholder="email@example.com"
+                                          className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                        />
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[11px] font-medium text-slate-300 mb-1">
+                                          Booked By / Coordinator (Optional)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={editForm.payerName}
+                                          onChange={(e) =>
+                                            setEditForm({ ...editForm, payerName: e.target.value })
+                                          }
+                                          placeholder="Optional coordinator name"
+                                          className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/10 text-white text-xs focus:outline-none focus:border-primary-500"
+                                        />
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingRegId(null)}
+                                        disabled={savingEdit}
+                                        className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition"
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveEdit(reg.id)}
+                                        disabled={savingEdit}
+                                        className="px-4 py-1.5 rounded-lg bg-brand-gradient hover:opacity-90 text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-50"
+                                      >
+                                        {savingEdit ? (
+                                          <>
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            Saving...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Save className="w-3.5 h-3.5" />
+                                            Save Changes
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="space-y-0.5 min-w-0">
+                                      <h5 className="text-sm font-semibold text-white truncate">
+                                        {reg.name}
+                                      </h5>
+                                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-400">
+                                        <span className="flex items-center gap-1">
+                                          <Phone className="w-3 h-3 text-slate-500" />
+                                          {reg.phone}
+                                        </span>
+                                        <span className="flex items-center gap-1 truncate">
+                                          <Mail className="w-3 h-3 text-slate-500" />
+                                          {reg.email}
+                                        </span>
+                                      </div>
+                                      {reg.payerName && reg.payerName !== reg.name && (
+                                        <span className="text-[10px] text-amber-300/80 block mt-0.5">
+                                          Booked by: {reg.payerName}
+                                        </span>
+                                      )}
+                                      <span className="text-[10px] text-slate-500 block mt-0.5">
+                                        Ref: #{reg.id.slice(-6).toUpperCase()} • {new Date(reg.createdAt).toLocaleDateString()}
+                                      </span>
+                                      {reg.mpesaCode && (
+                                        <span className="text-[10px] text-indigo-300 font-mono block mt-0.5">
+                                          M-Pesa: {reg.mpesaCode}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="shrink-0 flex flex-col items-end gap-2">
+                                      {isConfirmed ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                          Confirmed
+                                        </span>
+                                      ) : isReview ? (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                          <Clock className="w-3.5 h-3.5" />
+                                          Payment Under Review
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                                          <BookmarkCheck className="w-3.5 h-3.5" />
+                                          Provisional RSVP
+                                        </span>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEdit(reg)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition"
+                                      >
+                                        <Edit3 className="w-3 h-3" />
+                                        Edit Details
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             );
                           })}
